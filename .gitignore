@@ -169,3 +169,11 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+/raw_data/
+/results/
+*.csv
+*.zip
+*.html
+/2024_deformation/time_series/Time-Series-Analysis/
+/2024_deformation/time_series/TimeSeries-insar/
+
