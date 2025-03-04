@@ -61,7 +61,7 @@ def transform_time_series(dataframe):
         # print(f"Pixel {idx} - time_series após a conversão:")
         # print(time_series.head())  # Mostra os primeiros valores
 
-        pixels_dict[idx] = pd.DataFrame({"variation": time_series})  # Forma mais segura
+        pixels_dict[idx] = pd.DataFrame({f"{idx}": time_series})  # Forma mais segura
     
     return pixels_dict, metadata_dict
 

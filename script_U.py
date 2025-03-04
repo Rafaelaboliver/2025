@@ -10,10 +10,14 @@ import os
 import pyproj
 import hdbscan
 import folium
-import numpy as np
+#import numpy as np
 import pandas as pd
+import seaborn as sns
 import matplotlib.pyplot as plt
 #from IPython.display import IFrame
+from folium.plugins import MarkerCluster
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.metrics import silhouette_score, davies_bouldin_score
 
 import sys
 sys.path.append('/home/rafaela/internship/2025/')  # Add the correct directory
@@ -163,12 +167,7 @@ for _, pixel_df in pixels_dict.items():
         plt.grid(True, linestyle='--', alpha=0.5)  
         plt.show()
         
-
 # 10 - clustering
-
-# Selecionar apenas pixels com forte erosão (velocidade vertical corrigida negativa e significativa)
-threshold = np.percentile(rolling_mean_reduced.mean(axis=1), 5)  # Definir como os 5% menores valores
-erosion_pixels = rolling_mean_reduced[rolling_mean_reduced.mean(axis=1) < threshold]
 
 # Criar DataFrame para clustering com velocidades 
 clustering_data = pd.DataFrame({
@@ -177,45 +176,83 @@ clustering_data = pd.DataFrame({
     'velocity': [velocities_detrended_df.loc[key, 'detrended_velocity'] for key in velocities_detrended_df.index]  # Usando as velocidades brutas
 })
 
-# Aplicar HDBSCAN ao conjunto de dados
-clusterer = hdbscan.HDBSCAN(min_cluster_size=10, metric='euclidean', cluster_selection_method='eom')
-clustering_data['cluster'] = clusterer.fit_predict(clustering_data[['latitude', 'longitude', 'velocity']])
+# Normalizar os dados antes de aplicar HDBSCAN
+#scaler = StandardScaler()
+scaler = MinMaxScaler()
 
-# Criar mapa interativo
-if not clustering_data.empty:
-    mapa = folium.Map(location=[clustering_data['latitude'].mean(), clustering_data['longitude'].mean()], zoom_start=14)
+clustering_data_scaled = scaler.fit_transform(clustering_data[['latitude', 'longitude', 'velocity']])
 
-    # Adicionar os pontos ao mapa
-    for _, row in clustering_data.iterrows():
-        if row['velocity'] < -4:
-            color = 'red'  # 🚨 Forte erosão
-        elif -4 <= row['velocity'] < -2.5:
-            color = 'orange'  # ⚠️ Potencial erosão
-        else:
-            color = 'green'  # ✅ Estável
+# Aplicar HDBSCAN ao conjunto de dados escalado
+clusterer = hdbscan.HDBSCAN(
+    min_cluster_size=38, 
+    min_samples=4, 
+    metric='correlation', 
+    cluster_selection_method='eom'
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           )
+#clustering_data['cluster'] = clusterer.fit_predict(clustering_data[['latitude', 'longitude', 'velocity']])
+clustering_data['cluster'] = clusterer.fit_predict(clustering_data_scaled)
+clustering_data['probability'] = clusterer.probabilities_
 
-        folium.CircleMarker(
-            location=[row['latitude'], row['longitude']],
-            radius=3,
-            color=color,
-            fill=True,
-            fill_opacity=0.7
-        ).add_to(mapa)
+# Criar um dicionário mapeando o cluster para sua persistência
+persistence_dict = {i: p for i, p in enumerate(clusterer.cluster_persistence_)}
 
-    # Salvar o mapa interativo
-    mapa.save("mapa_erosao_teste.html")
+# Mapear a persistência para cada ponto com base no cluster atribuído
+clustering_data['persistence'] = clustering_data['cluster'].map(persistence_dict)
 
-else:
-    print("Nenhum dado válido para visualização.")
+# 11 - Criaçao mapa interativo
+mapa = folium.Map(location=[clustering_data['latitude'].mean(), clustering_data['longitude'].mean()], zoom_start=12)
+marker_cluster = MarkerCluster().add_to(mapa)
+
+for i, row in clustering_data.iterrows():
+    folium.CircleMarker(
+        location=[row['latitude'], row['longitude']],
+        radius=5,
+        color=f'#{hash(row["cluster"])%0xFFFFFF:06x}',  # Cor única por cluster
+        fill=True
+    ).add_to(marker_cluster)
+
+mapa.save("clusters_map.html")
 
 
-# Visualizar os clusters 
+# 12 - Visualizaçao os clusters 
 plt.figure(figsize=(10, 6))
 sc = plt.scatter(clustering_data['longitude'], clustering_data['latitude'], 
-                 c=clustering_data['velocity'], cmap='inferno', s=20)  # 'inferno' destaca bem os valores negativos
-plt.colorbar(sc, label="Velocidade Média (mm/ano)")
+                 c=clustering_data['cluster'], cmap='viridis', s=25)  # 'inferno' destaca bem os valores negativos
+plt.colorbar(sc, label="Cluster")
 plt.xlabel("Longitude")
 plt.ylabel("Latitude")
-plt.title("Mapa de Velocidade Média (Erosão)")
+plt.title("Clusters detectados - HDBSCAN")
 plt.grid()
 plt.show()
+
+# 13 - 
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
+
+fig = plt.figure(figsize=(10, 7))
+ax = fig.add_subplot(111, projection='3d')
+ax.scatter(clustering_data['longitude'], clustering_data['latitude'], clustering_data['velocity'], c=clustering_data['cluster'], cmap='viridis')
+
+ax.set_xlabel('Longitude')
+ax.set_ylabel('Latitude')
+ax.set_zlabel('Velocity')
+plt.title('Clusters - 3D Visualization')
+plt.show()
+
+# 14 - Testes para verificar os clusters
+plt.hist(clusterer.probabilities_, bins=20, edgecolor='black')
+plt.xlabel('Probabilidade de Clusterização')
+plt.ylabel('Frequência')
+plt.title('Distribuição das Probabilidades de Cluster')
+plt.show()
+
+sns.histplot(clustering_data['persistence'].dropna(), bins=20, kde=True)
+plt.xlabel("Persistência do Cluster")
+plt.ylabel("Frequência")
+plt.title("Distribuição da Persistência dos Clusters")
+plt.show()
+
+silhouette_avg = silhouette_score(clustering_data_scaled, clustering_data['cluster'])
+db_score = davies_bouldin_score(clustering_data_scaled, clustering_data['cluster'])
+print(f"Silhouette Score: {silhouette_avg}")
+print(f"Davies-Bouldin Score: {db_score}")
