@@ -8,13 +8,14 @@ Created on Wed Jan 22 10:40:31 2025
 
 import os
 import pyproj
-import hdbscan
+#import hdbscan
 import folium
 #import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 #from IPython.display import IFrame
+from sklearn.cluster import DBSCAN
 from folium.plugins import MarkerCluster
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.metrics import silhouette_score, davies_bouldin_score
@@ -26,8 +27,8 @@ from functions import transform_time_series, filter_by_polygon, linear_detrend, 
 
 
 # 1 - Importing the data
-folder_path = '/home/rafaela/internship/2025/raw_data/vertical'
-file_name = 'EGMS_L3_E37N23_100km_U_2019_2023_1.csv'
+folder_path = '/Users/rafaelaoliveira/Desktop/2025'
+file_name = 'EGMS_L3_E37N23_100km_U_2018_2022_1.csv'
 file_path = os.path.join(folder_path, file_name)
 raw_file = pd.read_csv(file_path)
 
@@ -179,25 +180,16 @@ clustering_data = pd.DataFrame({
 # Normalizar os dados antes de aplicar HDBSCAN
 #scaler = StandardScaler()
 scaler = MinMaxScaler()
-
 clustering_data_scaled = scaler.fit_transform(clustering_data[['latitude', 'longitude', 'velocity']])
 
-# Aplicar HDBSCAN ao conjunto de dados escalado
-clusterer = hdbscan.HDBSCAN(
-    min_cluster_size=38, 
-    min_samples=4, 
-    metric='correlation', 
-    cluster_selection_method='eom'
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           )
+# Aplicar DBSCAN ao conjunto de dados escalado
+clusterer = DBSCAN(eps=0.24, min_samples=12, metric='chebyshev')
+
 #clustering_data['cluster'] = clusterer.fit_predict(clustering_data[['latitude', 'longitude', 'velocity']])
 clustering_data['cluster'] = clusterer.fit_predict(clustering_data_scaled)
-clustering_data['probability'] = clusterer.probabilities_
 
-# Criar um dicionário mapeando o cluster para sua persistência
-persistence_dict = {i: p for i, p in enumerate(clusterer.cluster_persistence_)}
 
-# Mapear a persistência para cada ponto com base no cluster atribuído
-clustering_data['persistence'] = clustering_data['cluster'].map(persistence_dict)
+#----------------------------------------------------GRAFICOS-----------------------------------------------------------------
 
 # 11 - Criaçao mapa interativo
 mapa = folium.Map(location=[clustering_data['latitude'].mean(), clustering_data['longitude'].mean()], zoom_start=12)
@@ -251,6 +243,24 @@ plt.xlabel("Persistência do Cluster")
 plt.ylabel("Frequência")
 plt.title("Distribuição da Persistência dos Clusters")
 plt.show()
+
+#------------------------------------------VERIFICAÇAO-QUALIDADE-CLUSTER-------------------------------------------------------
+
+import numpy as np
+
+num_outliers = (clustering_data['cluster'] == -1).sum()
+print(f"Número de outliers detectados pelo DBSCAN: {num_outliers}")
+
+# Contar quantos clusters únicos existem (excluindo outliers, que são rotulados como -1)
+n_clusters = len(np.unique(clustering_data['cluster'][clustering_data['cluster'] != -1]))
+print(f"Número de clusters válidos (excluindo outliers): {n_clusters}")
+
+# # Só calcula o Silhouette Score se houver mais de um cluster válido
+# if n_clusters > 1:
+#     silhouette_avg = silhouette_score(clustering_data_scaled, clustering_data['cluster'])
+#     print(f"Silhouette Score: {silhouette_avg}")
+# else:
+#     print("Silhouette Score não pode ser calculado pois há apenas um cluster válido.")
 
 silhouette_avg = silhouette_score(clustering_data_scaled, clustering_data['cluster'])
 db_score = davies_bouldin_score(clustering_data_scaled, clustering_data['cluster'])
