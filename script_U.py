@@ -27,8 +27,8 @@ from functions import transform_time_series, filter_by_polygon, linear_detrend, 
 
 
 # 1 - Importing the data
-folder_path = '/Users/rafaelaoliveira/Desktop/2025'
-file_name = 'EGMS_L3_E37N23_100km_U_2018_2022_1.csv'
+folder_path = '/home/rafaela/internship/2025/raw_data/vertical/'
+file_name = 'EGMS_L3_E37N23_100km_U_2019_2023_1.csv'
 file_path = os.path.join(folder_path, file_name)
 raw_file = pd.read_csv(file_path)
 
@@ -174,16 +174,16 @@ for _, pixel_df in pixels_dict.items():
 clustering_data = pd.DataFrame({
     'latitude': [metadata_dict[key]['latitude'] for key in metadata_dict],
     'longitude': [metadata_dict[key]['longitude'] for key in metadata_dict],
-    'velocity': [velocities_detrended_df.loc[key, 'detrended_velocity'] for key in velocities_detrended_df.index]  # Usando as velocidades brutas
+    'velocity': [velocities_detrended_df.loc[index, 'detrended_velocity'] for index in velocities_detrended_df.index]  # Usando as velocidades brutas
 })
 
-# Normalizar os dados antes de aplicar HDBSCAN
+# Normalizar os dados antes de aplicar DBSCAN
 #scaler = StandardScaler()
 scaler = MinMaxScaler()
 clustering_data_scaled = scaler.fit_transform(clustering_data[['latitude', 'longitude', 'velocity']])
 
 # Aplicar DBSCAN ao conjunto de dados escalado
-clusterer = DBSCAN(eps=0.24, min_samples=12, metric='chebyshev')
+clusterer = DBSCAN(eps=0.005, min_samples=7, metric='cosine')
 
 #clustering_data['cluster'] = clusterer.fit_predict(clustering_data[['latitude', 'longitude', 'velocity']])
 clustering_data['cluster'] = clusterer.fit_predict(clustering_data_scaled)
@@ -213,7 +213,7 @@ sc = plt.scatter(clustering_data['longitude'], clustering_data['latitude'],
 plt.colorbar(sc, label="Cluster")
 plt.xlabel("Longitude")
 plt.ylabel("Latitude")
-plt.title("Clusters detectados - HDBSCAN")
+plt.title("Clusters detectados - DBSCAN")
 plt.grid()
 plt.show()
 
