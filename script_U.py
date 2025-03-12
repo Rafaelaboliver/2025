@@ -183,7 +183,7 @@ scaler = MinMaxScaler()
 clustering_data_scaled = scaler.fit_transform(clustering_data[['latitude', 'longitude', 'velocity']])
 
 # Aplicar DBSCAN ao conjunto de dados escalado
-clusterer = DBSCAN(eps=0.005, min_samples=7, metric='cosine')
+clusterer = DBSCAN(eps=0.0645, min_samples=7, metric='euclidean')
 
 #clustering_data['cluster'] = clusterer.fit_predict(clustering_data[['latitude', 'longitude', 'velocity']])
 clustering_data['cluster'] = clusterer.fit_predict(clustering_data_scaled)
@@ -248,21 +248,37 @@ plt.show()
 
 import numpy as np
 
-num_outliers = (clustering_data['cluster'] == -1).sum()
-print(f"Número de outliers detectados pelo DBSCAN: {num_outliers}")
+# num_outliers = (clustering_data['cluster'] == -1).sum()
+# print(f"Número de outliers detectados pelo DBSCAN: {num_outliers}")
 
-# Contar quantos clusters únicos existem (excluindo outliers, que são rotulados como -1)
-n_clusters = len(np.unique(clustering_data['cluster'][clustering_data['cluster'] != -1]))
-print(f"Número de clusters válidos (excluindo outliers): {n_clusters}")
+# # Contar quantos clusters únicos existem (excluindo outliers, que são rotulados como -1)
+# n_clusters = len(np.unique(clustering_data['cluster'][clustering_data['cluster'] != -1]))
+# print(f"Número de clusters válidos (excluindo outliers): {n_clusters}")
 
-# # Só calcula o Silhouette Score se houver mais de um cluster válido
-# if n_clusters > 1:
-#     silhouette_avg = silhouette_score(clustering_data_scaled, clustering_data['cluster'])
-#     print(f"Silhouette Score: {silhouette_avg}")
-# else:
-#     print("Silhouette Score não pode ser calculado pois há apenas um cluster válido.")
+# # # Só calcula o Silhouette Score se houver mais de um cluster válido
+# # if n_clusters > 1:
+# #     silhouette_avg = silhouette_score(clustering_data_scaled, clustering_data['cluster'])
+# #     print(f"Silhouette Score: {silhouette_avg}")
+# # else:
+# #     print("Silhouette Score não pode ser calculado pois há apenas um cluster válido.")
 
-silhouette_avg = silhouette_score(clustering_data_scaled, clustering_data['cluster'])
-db_score = davies_bouldin_score(clustering_data_scaled, clustering_data['cluster'])
-print(f"Silhouette Score: {silhouette_avg}")
-print(f"Davies-Bouldin Score: {db_score}")
+# silhouette_avg = silhouette_score(clustering_data_scaled, clustering_data['cluster'])
+# db_score = davies_bouldin_score(clustering_data_scaled, clustering_data['cluster'])
+# print(f"Silhouette Score: {silhouette_avg}")
+# print(f"Davies-Bouldin Score: {db_score}")
+
+valid_clusters = clustering_data[clustering_data['cluster'] != -1]['cluster']
+valid_features = clustering_data_scaled[clustering_data['cluster'] != -1]
+
+# Apenas calcular Silhouette Score se houver pelo menos 2 clusters
+if len(np.unique(valid_clusters)) > 1:
+    silhouette_avg = silhouette_score(valid_features, valid_clusters)
+    print(f"Silhouette Score: {silhouette_avg}")
+else:
+    print("Silhouette Score não pode ser calculado (menos de 2 clusters válidos).")
+
+if len(np.unique(valid_clusters)) > 1:
+    db_score = davies_bouldin_score(valid_features, valid_clusters)
+    print(f"Davies-Bouldin Score: {db_score}")
+else:
+    print("Davies-Bouldin Score não pode ser calculado (menos de 2 clusters válidos).")
