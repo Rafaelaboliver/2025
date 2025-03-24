@@ -13,9 +13,13 @@ import folium
 #import numpy as np
 import pandas as pd
 import seaborn as sns
+import plotly.io as pio
+import plotly.express as px
 import matplotlib.pyplot as plt
+
 #from IPython.display import IFrame
 from sklearn.cluster import DBSCAN
+from IPython.display import display
 from folium.plugins import MarkerCluster
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.metrics import silhouette_score, davies_bouldin_score
@@ -172,10 +176,14 @@ for _, pixel_df in pixels_dict.items():
 
 # Criar DataFrame para clustering com velocidades 
 clustering_data = pd.DataFrame({
+    'pixel': [key for key in metadata_dict],
     'latitude': [metadata_dict[key]['latitude'] for key in metadata_dict],
     'longitude': [metadata_dict[key]['longitude'] for key in metadata_dict],
     'velocity': [velocities_detrended_df.loc[index, 'detrended_velocity'] for index in velocities_detrended_df.index]  # Usando as velocidades brutas
 })
+
+#Definir o pixel como indice do DataFrame
+clustering_data.set_index('pixel', inplace=True)
 
 # Normalizar os dados antes de aplicar DBSCAN
 #scaler = StandardScaler()
@@ -183,9 +191,7 @@ scaler = MinMaxScaler()
 clustering_data_scaled = scaler.fit_transform(clustering_data[['latitude', 'longitude', 'velocity']])
 
 # Aplicar DBSCAN ao conjunto de dados escalado
-clusterer = DBSCAN(eps=0.0645, min_samples=7, metric='euclidean')
-
-#clustering_data['cluster'] = clusterer.fit_predict(clustering_data[['latitude', 'longitude', 'velocity']])
+clusterer = DBSCAN(eps=0.044, min_samples=9, metric='euclidean')
 clustering_data['cluster'] = clusterer.fit_predict(clustering_data_scaled)
 
 
@@ -248,12 +254,56 @@ plt.show()
 
 import numpy as np
 
-# num_outliers = (clustering_data['cluster'] == -1).sum()
-# print(f"Número de outliers detectados pelo DBSCAN: {num_outliers}")
+# Definir faixas de parâmetros
+eps_values = np.arange(0.044, 0.075)  # Testa valores entre 0.044 e 0.050
+min_samples_values = [5, 6, 7, 8, 9, 10, 11, 12]
+metrics = ['euclidean', 'manhattan']
 
-# # Contar quantos clusters únicos existem (excluindo outliers, que são rotulados como -1)
-# n_clusters = len(np.unique(clustering_data['cluster'][clustering_data['cluster'] != -1]))
-# print(f"Número de clusters válidos (excluindo outliers): {n_clusters}")
+best_config = None
+best_silhouette = -1
+
+# Loop pelos parâmetros
+test_results = []
+for eps in eps_values:
+    for min_samples in min_samples_values:
+        for metric in metrics:
+            clusterer = DBSCAN(eps=eps, min_samples=min_samples, metric=metric)
+            labels = clusterer.fit_predict(clustering_data_scaled)
+            
+            # Contar outliers e clusters
+            num_outliers = np.sum(labels == -1)
+            n_clusters = len(np.unique(labels[labels != -1]))
+            
+            # Avaliação apenas se houver mais de um cluster
+            if n_clusters > 1:
+                valid_clusters = labels[labels != -1]
+                valid_features = clustering_data_scaled[labels != -1]
+                silhouette_avg = silhouette_score(valid_features, valid_clusters)
+                db_score = davies_bouldin_score(valid_features, valid_clusters)
+                
+                # Salvar resultados
+                test_results.append((eps, min_samples, metric, num_outliers, n_clusters, silhouette_avg, db_score))
+                
+                # Atualizar melhor configuração
+                if silhouette_avg > best_silhouette:
+                    best_silhouette = silhouette_avg
+                    best_config = (eps, min_samples, metric, silhouette_avg, db_score)
+
+# Criar DataFrame com os resultados
+df_results = pd.DataFrame(test_results, columns=['eps', 'min_samples', 'metric', 'outliers', 'clusters', 'silhouette', 'davies_bouldin'])
+
+# Exibir os melhores resultados
+print("Melhor configuração encontrada:")
+print(f"eps={best_config[0]}, min_samples={best_config[1]}, metric={best_config[2]}")
+print(f"Silhouette Score: {best_config[3]:.4f}, Davies-Bouldin Score: {best_config[4]:.4f}")
+
+
+num_outliers = (clustering_data['cluster'] == -1).sum()
+print(f"Número de outliers detectados pelo DBSCAN: {num_outliers}")
+
+# Contar quantos clusters únicos existem (excluindo outliers, que são rotulados como -1)
+n_clusters = len(np.unique(clustering_data['cluster'][clustering_data['cluster'] != -1]))
+print(f"Número de clusters válidos (excluindo outliers): {n_clusters}")
 
 # # # Só calcula o Silhouette Score se houver mais de um cluster válido
 # # if n_clusters > 1:
@@ -282,3 +332,76 @@ if len(np.unique(valid_clusters)) > 1:
     print(f"Davies-Bouldin Score: {db_score}")
 else:
     print("Davies-Bouldin Score não pode ser calculado (menos de 2 clusters válidos).")
+    
+
+import matplotlib.cm as cm
+import matplotlib.colors as colors
+# Criar um mapa centralizado na média das coordenadas
+map_clusters = folium.Map(location=[clustering_data['latitude'].mean(), clustering_data['longitude'].mean()], zoom_start=12)
+
+# Criar uma paleta de cores para os clusters
+unique_clusters = clustering_data['cluster'].unique()
+cmap = cm.get_cmap('tab10', len(unique_clusters))
+colors_dict = {cluster: colors.rgb2hex(cmap(i)[:3]) for i, cluster in enumerate(unique_clusters)}
+
+# Adicionar pontos ao mapa
+for idx, row in clustering_data.iterrows():
+    folium.CircleMarker(
+        location=[row['latitude'], row['longitude']],
+        radius=3,
+        color='grey' if row['cluster'] == -1 else colors_dict[row['cluster']],
+        fill=True,
+        fill_color='grey' if row['cluster'] == -1 else colors_dict[row['cluster']],
+        fill_opacity=0.6
+    ).add_to(map_clusters)
+
+# Exibir mapa
+map_clusters.save("clusters_mapa2.html")
+
+pio.renderers.default = "browser"
+
+import plotly.graph_objects as go
+import numpy as np
+
+# Garantir que os clusters são inteiros
+clustering_data['cluster'] = clustering_data['cluster'].astype(int)
+
+# Normalizar tamanho dos pontos
+size_scale = 10
+sizes = (clustering_data['velocity'] - clustering_data['velocity'].min()) / (clustering_data['velocity'].max() - clustering_data['velocity'].min()) * size_scale
+sizes = np.clip(sizes, a_min=2, a_max=None)  # Garantir tamanho mínimo
+
+# Criar uma paleta de cores para os clusters
+unique_clusters = clustering_data['cluster'].unique()
+color_map = {cluster: f"hsl({(i / len(unique_clusters)) * 360}, 70%, 50%)" for i, cluster in enumerate(unique_clusters)}
+color_map[-1] = 'gray'  # Outliers em cinza
+
+# Aplicar cores baseadas no cluster
+colors = clustering_data['cluster'].map(color_map)
+
+fig = go.Figure()
+
+fig.add_trace(go.Scatter3d(
+    x=clustering_data['longitude'],
+    y=clustering_data['latitude'],
+    z=clustering_data['velocity'],
+    mode='markers',
+    marker=dict(
+        size=sizes,  
+        color=colors,  
+        opacity=0.8
+    ),
+    text=[f"Cluster: {c}<br>Velocidade: {v:.2f}" for c, v in zip(clustering_data['cluster'], clustering_data['velocity'])], 
+    hoverinfo='text'
+))
+
+fig.update_layout(
+    title="Clusters - 3D Visualization (DBSCAN)",
+    scene=dict(
+        xaxis_title="Longitude",
+        yaxis_title="Latitude",
+        zaxis_title="Velocity"
+    )
+)
+
+fig.show()
