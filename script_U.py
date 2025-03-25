@@ -137,8 +137,13 @@ velocities_avg = velocities_df['mean_velocity'].mean()
 velocities_detrended = velocities_df['mean_velocity'] - velocities_avg
 velocities_detrended_df = pd.DataFrame({'detrended_velocity': velocities_detrended})
 
+# 9 - Removing positive velocities
 
-# 9 - Trend Removal Check: visualization of data before and after corrections   
+velocities_negative = velocities_detrended_df.copy()
+velocities_negative = velocities_negative[velocities_negative['detrended_velocity'] < 0]
+
+
+# 10 - Trend Removal Check: visualization of data before and after corrections   
 
 for _, pixel_df in pixels_dict.items():  
     # column name of the dictionaire
@@ -171,15 +176,18 @@ for _, pixel_df in pixels_dict.items():
         plt.ylabel('Displacement (mm)')
         plt.grid(True, linestyle='--', alpha=0.5)  
         plt.show()
-        
-# 10 - clustering
+    
 
+# 11 - clustering
+
+#filtrar o metadata com os pixels aue estao em velocities_negative:
+    filtered_metadata = {key: metadata_dict[key] for key in velocities_negative.index}
 # Criar DataFrame para clustering com velocidades 
 clustering_data = pd.DataFrame({
-    'pixel': [key for key in metadata_dict],
-    'latitude': [metadata_dict[key]['latitude'] for key in metadata_dict],
-    'longitude': [metadata_dict[key]['longitude'] for key in metadata_dict],
-    'velocity': [velocities_detrended_df.loc[index, 'detrended_velocity'] for index in velocities_detrended_df.index]  # Usando as velocidades brutas
+    'pixel': list(filtered_metadata.keys()),
+    'latitude': [filtered_metadata[key]['latitude'] for key in filtered_metadata],
+    'longitude': [filtered_metadata[key]['longitude'] for key in filtered_metadata],
+    'velocity': [velocities_negative.loc[key, 'detrended_velocity'] for key in filtered_metadata]  # Usando as velocidades brutas
 })
 
 #Definir o pixel como indice do DataFrame
@@ -191,26 +199,11 @@ scaler = MinMaxScaler()
 clustering_data_scaled = scaler.fit_transform(clustering_data[['latitude', 'longitude', 'velocity']])
 
 # Aplicar DBSCAN ao conjunto de dados escalado
-clusterer = DBSCAN(eps=0.044, min_samples=9, metric='euclidean')
+clusterer = DBSCAN(eps=0.090, min_samples=12, metric='euclidean')
 clustering_data['cluster'] = clusterer.fit_predict(clustering_data_scaled)
 
 
 #----------------------------------------------------GRAFICOS-----------------------------------------------------------------
-
-# 11 - Criaçao mapa interativo
-mapa = folium.Map(location=[clustering_data['latitude'].mean(), clustering_data['longitude'].mean()], zoom_start=12)
-marker_cluster = MarkerCluster().add_to(mapa)
-
-for i, row in clustering_data.iterrows():
-    folium.CircleMarker(
-        location=[row['latitude'], row['longitude']],
-        radius=5,
-        color=f'#{hash(row["cluster"])%0xFFFFFF:06x}',  # Cor única por cluster
-        fill=True
-    ).add_to(marker_cluster)
-
-mapa.save("clusters_map.html")
-
 
 # 12 - Visualizaçao os clusters 
 plt.figure(figsize=(10, 6))
@@ -223,7 +216,7 @@ plt.title("Clusters detectados - DBSCAN")
 plt.grid()
 plt.show()
 
-# 13 - 
+# 13 - Visualizaçao os clusters + velocidades
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 
@@ -255,7 +248,7 @@ plt.show()
 import numpy as np
 
 # Definir faixas de parâmetros
-eps_values = np.arange(0.044, 0.075)  # Testa valores entre 0.044 e 0.050
+eps_values = np.arange(0.0900, 0.150)  # Testa valores entre 0.044 e 0.050
 min_samples_values = [5, 6, 7, 8, 9, 10, 11, 12]
 metrics = ['euclidean', 'manhattan']
 
@@ -358,26 +351,27 @@ for idx, row in clustering_data.iterrows():
 # Exibir mapa
 map_clusters.save("clusters_mapa2.html")
 
-pio.renderers.default = "browser"
-
 import plotly.graph_objects as go
 import numpy as np
+import pandas as pd
+import plotly.io as pio
 
 # Garantir que os clusters são inteiros
 clustering_data['cluster'] = clustering_data['cluster'].astype(int)
 
-# Normalizar tamanho dos pontos
-size_scale = 10
-sizes = (clustering_data['velocity'] - clustering_data['velocity'].min()) / (clustering_data['velocity'].max() - clustering_data['velocity'].min()) * size_scale
-sizes = np.clip(sizes, a_min=2, a_max=None)  # Garantir tamanho mínimo
+# Remover valores NaN antes da normalização
+clustering_data = clustering_data.dropna(subset=['longitude', 'latitude', 'velocity'])
 
-# Criar uma paleta de cores para os clusters
-unique_clusters = clustering_data['cluster'].unique()
-color_map = {cluster: f"hsl({(i / len(unique_clusters)) * 360}, 70%, 50%)" for i, cluster in enumerate(unique_clusters)}
-color_map[-1] = 'gray'  # Outliers em cinza
+# Verificar valores de velocity antes da normalização
+print(clustering_data['velocity'].describe())
 
-# Aplicar cores baseadas no cluster
-colors = clustering_data['cluster'].map(color_map)
+# Normalizar tamanho dos pontos com um fator maior
+size_scale = 5  
+sizes = ((clustering_data['velocity'] - clustering_data['velocity'].min()) / 
+         (clustering_data['velocity'].max() - clustering_data['velocity'].min()) * size_scale) + 5
+
+# Verificar se os dados estão corretos
+print(clustering_data.head())
 
 fig = go.Figure()
 
@@ -388,8 +382,9 @@ fig.add_trace(go.Scatter3d(
     mode='markers',
     marker=dict(
         size=sizes,  
-        color=colors,  
-        opacity=0.8
+        color=clustering_data['cluster'],  
+        colorscale='viridis',  
+        opacity=1  # Opacidade máxima para garantir visibilidade
     ),
     text=[f"Cluster: {c}<br>Velocidade: {v:.2f}" for c, v in zip(clustering_data['cluster'], clustering_data['velocity'])], 
     hoverinfo='text'
@@ -404,4 +399,5 @@ fig.update_layout(
     )
 )
 
+pio.renderers.default = "browser"
 fig.show()
