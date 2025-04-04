@@ -243,6 +243,30 @@ plt.ylabel("Frequência")
 plt.title("Distribuição da Persistência dos Clusters")
 plt.show()
 
+import matplotlib.cm as cm
+import matplotlib.colors as colors
+# Criar um mapa centralizado na média das coordenadas
+map_clusters = folium.Map(location=[clustering_data['latitude'].mean(), clustering_data['longitude'].mean()], zoom_start=12)
+
+# Criar uma paleta de cores para os clusters
+unique_clusters = clustering_data['cluster'].unique()
+cmap = cm.get_cmap('tab10', len(unique_clusters))
+colors_dict = {cluster: colors.rgb2hex(cmap(i)[:3]) for i, cluster in enumerate(unique_clusters)}
+
+# Adicionar pontos ao mapa
+for idx, row in clustering_data.iterrows():
+    folium.CircleMarker(
+        location=[row['latitude'], row['longitude']],
+        radius=3,
+        color='grey' if row['cluster'] == -1 else colors_dict[row['cluster']],
+        fill=True,
+        fill_color='grey' if row['cluster'] == -1 else colors_dict[row['cluster']],
+        fill_opacity=0.6
+    ).add_to(map_clusters)
+
+# Exibir mapa
+map_clusters.save("clusters_mapa2.html")
+
 #------------------------------------------VERIFICAÇAO-QUALIDADE-CLUSTER-------------------------------------------------------
 
 import numpy as np
@@ -326,78 +350,3 @@ if len(np.unique(valid_clusters)) > 1:
 else:
     print("Davies-Bouldin Score não pode ser calculado (menos de 2 clusters válidos).")
     
-
-import matplotlib.cm as cm
-import matplotlib.colors as colors
-# Criar um mapa centralizado na média das coordenadas
-map_clusters = folium.Map(location=[clustering_data['latitude'].mean(), clustering_data['longitude'].mean()], zoom_start=12)
-
-# Criar uma paleta de cores para os clusters
-unique_clusters = clustering_data['cluster'].unique()
-cmap = cm.get_cmap('tab10', len(unique_clusters))
-colors_dict = {cluster: colors.rgb2hex(cmap(i)[:3]) for i, cluster in enumerate(unique_clusters)}
-
-# Adicionar pontos ao mapa
-for idx, row in clustering_data.iterrows():
-    folium.CircleMarker(
-        location=[row['latitude'], row['longitude']],
-        radius=3,
-        color='grey' if row['cluster'] == -1 else colors_dict[row['cluster']],
-        fill=True,
-        fill_color='grey' if row['cluster'] == -1 else colors_dict[row['cluster']],
-        fill_opacity=0.6
-    ).add_to(map_clusters)
-
-# Exibir mapa
-map_clusters.save("clusters_mapa2.html")
-
-import plotly.graph_objects as go
-import numpy as np
-import pandas as pd
-import plotly.io as pio
-
-# Garantir que os clusters são inteiros
-clustering_data['cluster'] = clustering_data['cluster'].astype(int)
-
-# Remover valores NaN antes da normalização
-clustering_data = clustering_data.dropna(subset=['longitude', 'latitude', 'velocity'])
-
-# Verificar valores de velocity antes da normalização
-print(clustering_data['velocity'].describe())
-
-# Normalizar tamanho dos pontos com um fator maior
-size_scale = 5  
-sizes = ((clustering_data['velocity'] - clustering_data['velocity'].min()) / 
-         (clustering_data['velocity'].max() - clustering_data['velocity'].min()) * size_scale) + 5
-
-# Verificar se os dados estão corretos
-print(clustering_data.head())
-
-fig = go.Figure()
-
-fig.add_trace(go.Scatter3d(
-    x=clustering_data['longitude'],
-    y=clustering_data['latitude'],
-    z=clustering_data['velocity'],
-    mode='markers',
-    marker=dict(
-        size=sizes,  
-        color=clustering_data['cluster'],  
-        colorscale='viridis',  
-        opacity=1  # Opacidade máxima para garantir visibilidade
-    ),
-    text=[f"Cluster: {c}<br>Velocidade: {v:.2f}" for c, v in zip(clustering_data['cluster'], clustering_data['velocity'])], 
-    hoverinfo='text'
-))
-
-fig.update_layout(
-    title="Clusters - 3D Visualization (DBSCAN)",
-    scene=dict(
-        xaxis_title="Longitude",
-        yaxis_title="Latitude",
-        zaxis_title="Velocity"
-    )
-)
-
-pio.renderers.default = "browser"
-fig.show()
