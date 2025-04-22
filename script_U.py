@@ -72,6 +72,7 @@ sa_long_min = 3.410
 sa_long_max = 3.480
 
 file_sa = filter_by_polygon(file, sa_lat_min, sa_lat_max, sa_long_min, sa_long_max)
+print("file_sa_df:", file_sa.shape)
 
 # 5 - Applying the function to transform the time series
 
@@ -199,8 +200,15 @@ scaler = MinMaxScaler()
 clustering_data_scaled = scaler.fit_transform(clustering_data[['latitude', 'longitude', 'velocity']])
 
 # Aplicar DBSCAN ao conjunto de dados escalado
-clusterer = DBSCAN(eps=0.090, min_samples=12, metric='euclidean')
+clusterer = DBSCAN(eps=0.09, min_samples=12, metric='euclidean')
 clustering_data['cluster'] = clusterer.fit_predict(clustering_data_scaled)
+
+num_outliers = (clustering_data['cluster'] == -1).sum()
+print(f"Número de outliers detectados pelo DBSCAN: {num_outliers}")
+
+# Contar quantos clusters únicos existem (excluindo outliers, que são rotulados como -1)
+n_clusters = len(np.unique(clustering_data['cluster'][clustering_data['cluster'] != -1]))
+print(f"Número de clusters válidos (excluindo outliers): {n_clusters}")
 
 
 #----------------------------------------------------GRAFICOS-----------------------------------------------------------------
@@ -230,19 +238,6 @@ ax.set_zlabel('Velocity')
 plt.title('Clusters - 3D Visualization')
 plt.show()
 
-# 14 - Testes para verificar os clusters
-plt.hist(clusterer.probabilities_, bins=20, edgecolor='black')
-plt.xlabel('Probabilidade de Clusterização')
-plt.ylabel('Frequência')
-plt.title('Distribuição das Probabilidades de Cluster')
-plt.show()
-
-sns.histplot(clustering_data['persistence'].dropna(), bins=20, kde=True)
-plt.xlabel("Persistência do Cluster")
-plt.ylabel("Frequência")
-plt.title("Distribuição da Persistência dos Clusters")
-plt.show()
-
 import matplotlib.cm as cm
 import matplotlib.colors as colors
 # Criar um mapa centralizado na média das coordenadas
@@ -267,12 +262,96 @@ for idx, row in clustering_data.iterrows():
 # Exibir mapa
 map_clusters.save("clusters_mapa2.html")
 
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
+import folium
+from folium.raster_layers import ImageOverlay  # Correção aqui
+from scipy.interpolate import griddata
+from branca.colormap import linear
+import tempfile
+import os
+
+# Criar um mapa centralizado na média das coordenadas
+map_clusters = folium.Map(location=[clustering_data['latitude'].mean(), clustering_data['longitude'].mean()], zoom_start=12)
+
+# Criar uma grade regular para interpolação
+grid_x, grid_y = np.meshgrid(
+    np.linspace(clustering_data['longitude'].min(), clustering_data['longitude'].max(), 300),
+    np.linspace(clustering_data['latitude'].min(), clustering_data['latitude'].max(), 300)
+)
+
+# Interpolar os valores de velocidade para a grade
+grid_z = griddata(
+    (clustering_data['longitude'], clustering_data['latitude']), 
+    clustering_data['velocity'], 
+    (grid_x, grid_y), 
+    method='cubic'
+)
+
+# Criar a figura com contornos
+fig, ax = plt.subplots(figsize=(8, 8))
+
+# Definir níveis das curvas de nível (ajustar conforme necessário)
+levels = np.linspace(clustering_data['velocity'].min(), clustering_data['velocity'].max(), 10)
+
+# Criar o mapa de contorno
+contour = ax.contourf(grid_x, grid_y, grid_z, levels=levels, cmap="bwr", alpha=0.7)
+
+# Adicionar a barra de cores
+plt.colorbar(contour, label="Velocidade Vertical")
+
+# Remover eixos
+ax.set_xticks([])
+ax.set_yticks([])
+ax.axis('off')
+
+# Salvar a imagem temporária com fundo transparente
+temp_dir = tempfile.gettempdir()
+contour_path = os.path.join(temp_dir, "contour_map.png")
+plt.savefig(contour_path, transparent=True, bbox_inches='tight', pad_inches=0, dpi=300)
+plt.close()
+
+# Adicionar a imagem ao mapa
+image_overlay = ImageOverlay(
+    image=contour_path,
+    bounds=[
+        [clustering_data['latitude'].min(), clustering_data['longitude'].min()],
+        [clustering_data['latitude'].max(), clustering_data['longitude'].max()]
+    ],
+    opacity=0.6
+)
+
+# Adicionar camada ao mapa
+image_overlay.add_to(map_clusters)
+
+# Salvar o mapa interativo
+map_clusters.save("clusters_contour_map.html")
+
+print("Mapa gerado: clusters_contour_map.html")
+
+
+
 #------------------------------------------VERIFICAÇAO-QUALIDADE-CLUSTER-------------------------------------------------------
 
 import numpy as np
+# 14 - Testes para verificar os clusters
+plt.hist(clusterer.probabilities_, bins=20, edgecolor='black')
+plt.xlabel('Probabilidade de Clusterização')
+plt.ylabel('Frequência')
+plt.title('Distribuição das Probabilidades de Cluster')
+plt.show()
+
+sns.histplot(clustering_data['persistence'].dropna(), bins=20, kde=True)
+plt.xlabel("Persistência do Cluster")
+plt.ylabel("Frequência")
+plt.title("Distribuição da Persistência dos Clusters")
+plt.show()
 
 # Definir faixas de parâmetros
-eps_values = np.arange(0.0900, 0.150)  # Testa valores entre 0.044 e 0.050
+eps_values = np.arange(0.045, 0.150)  # Testa valores entre 0.044 e 0.050
 min_samples_values = [5, 6, 7, 8, 9, 10, 11, 12]
 metrics = ['euclidean', 'manhattan']
 
@@ -315,13 +394,6 @@ print(f"eps={best_config[0]}, min_samples={best_config[1]}, metric={best_config[
 print(f"Silhouette Score: {best_config[3]:.4f}, Davies-Bouldin Score: {best_config[4]:.4f}")
 
 
-num_outliers = (clustering_data['cluster'] == -1).sum()
-print(f"Número de outliers detectados pelo DBSCAN: {num_outliers}")
-
-# Contar quantos clusters únicos existem (excluindo outliers, que são rotulados como -1)
-n_clusters = len(np.unique(clustering_data['cluster'][clustering_data['cluster'] != -1]))
-print(f"Número de clusters válidos (excluindo outliers): {n_clusters}")
-
 # # # Só calcula o Silhouette Score se houver mais de um cluster válido
 # # if n_clusters > 1:
 # #     silhouette_avg = silhouette_score(clustering_data_scaled, clustering_data['cluster'])
@@ -349,4 +421,7 @@ if len(np.unique(valid_clusters)) > 1:
     print(f"Davies-Bouldin Score: {db_score}")
 else:
     print("Davies-Bouldin Score não pode ser calculado (menos de 2 clusters válidos).")
+    
+
+
     
