@@ -173,7 +173,6 @@ cython_debug/
 /results/
 *.csv
 *.zip
-*.html
 /2024_deformation/time_series/Time-Series-Analysis/
 /2024_deformation/time_series/TimeSeries-insar/
 

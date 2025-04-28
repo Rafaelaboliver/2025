@@ -11,6 +11,7 @@ Created on Tue Apr 22 13:23:00 2025
 # ===========================================
 import os
 import pyproj
+import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
@@ -24,11 +25,17 @@ from functions import (
     linear_detrend,
     process_rolling_mean
 )
-from clustering import run_dbscan_clustering
+from clustering import ( 
+    run_dbscan_clustering,
+    optimize_dbscan_parameters
+    )
 from visualization import (
     plot_clusters_2d,
     plot_clusters_3d,
-    generate_cluster_map
+    generate_cluster_contour_map,
+    generate_cluster_interactive_map,
+    plot_top10_comparison,
+    generate_combined_map
 )
 
 # ===========================================
@@ -37,6 +44,8 @@ from visualization import (
 DATA_PATH = "/home/rafaela/internship/2025/raw_data/vertical/"
 FILE_NAME = "EGMS_L3_E37N23_100km_U_2019_2023_1.csv"
 FILE_PATH = os.path.join(DATA_PATH, FILE_NAME)
+RESULTS_PATH = "/home/rafaela/internship/2025/results/plots/vertical/"
+
 
 SOURCE_EPSG = pyproj.CRS("EPSG:3035")  # Spatial reference system (example)
 TARGET_EPSG = pyproj.CRS("EPSG:4326")  # Target CRS (WGS 84 for lat/lon) - use 23032 to UTM32
@@ -46,6 +55,8 @@ LAT_MIN = 43.670
 LAT_MAX = 43.700
 LON_MIN = 3.410
 LON_MAX = 3.480
+
+
 
 # ===========================================
 # 1. LOAD AND PREPARE DATA
@@ -82,7 +93,7 @@ velocities_detrended_df = pd.DataFrame({'detrended_velocity': velocities_detrend
 velocities_negative = velocities_detrended_df[velocities_detrended_df['detrended_velocity'] < 0]
 
 # ===========================================
-# 4. CLUSTERING PIPELINE
+# 4. BUILD THE CLUSTERING DATASET
 # ===========================================
 filtered_metadata = {k: metadata_dict[k] for k in velocities_negative.index}
 
@@ -94,16 +105,45 @@ clustering_df = pd.DataFrame({
 })
 clustering_df.set_index('pixel', inplace=True)
 
+# ===========================================
+# 5. NORMALIZE THE DATA
+# ===========================================
 scaler = MinMaxScaler()
 scaled_data = scaler.fit_transform(clustering_df[['latitude', 'longitude', 'velocity']])
+
+# ===========================================
+# 6. OPTMIZE PARAMETERS DBSCAN
+# ===========================================
+
+# Define parameter ranges
+eps_values = np.linspace(0.05, 10.0, num=500) # Generate epsilon values automatically between 0.05 and 10
+min_samples_values = np.arange(5, 21) # Generate min_samples automatically between 5 and 20
+metrics = ['euclidean', 'manhattan']
+
+# Optimize
+best_config, df_results = optimize_dbscan_parameters(
+    scaled_data=scaled_data,
+    eps_range=eps_values,
+    min_samples_values=min_samples_values,
+    metrics=metrics
+)
+
+print("Best configuration found:", best_config)
+
+# ===========================================
+# 7. CLUSTERING PIPELINE
+# ===========================================
 
 clustering_df = run_dbscan_clustering(clustering_df, scaled_data)
 
 # ===========================================
-# 5. VISUALIZATION
+# 8. VISUALIZATION
 # ===========================================
-plot_clusters_2d(clustering_df)
-plot_clusters_3d(clustering_df)
-generate_cluster_map(clustering_df)
+plot_clusters_2d(clustering_df, save_path=RESULTS_PATH)
+plot_clusters_3d(clustering_df, save_path=RESULTS_PATH)
+generate_cluster_contour_map(clustering_df, save_path=RESULTS_PATH)
+generate_cluster_interactive_map(clustering_df, save_path=RESULTS_PATH)
+plot_top10_comparison(df_results, save_path=RESULTS_PATH)
+generate_combined_map(clustering_df, save_path=RESULTS_PATH)
 
 print("Process completed.")
