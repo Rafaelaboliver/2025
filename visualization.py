@@ -10,6 +10,7 @@ import os
 import folium
 import tempfile
 import numpy as np
+import seaborn as sns
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -18,41 +19,42 @@ from mpl_toolkits.mplot3d import Axes3D
 from folium.raster_layers import ImageOverlay
 
 
-def plot_clusters_2d(df, save_path=None):
+def plot_clusters_2d(df, cluster_column='cluster', save_path=None, prefix=""):
     plt.figure(figsize=(10, 6))
-    scatter = plt.scatter(df['longitude'], df['latitude'], c=df['cluster'], cmap='viridis', s=25)
+    scatter = plt.scatter(df['longitude'], df['latitude'], c=df[cluster_column], cmap='viridis', s=25)
     plt.colorbar(scatter, label="Cluster")
     plt.xlabel("Longitude")
     plt.ylabel("Latitude")
-    plt.title("DBSCAN Clusters (2D)")
+    plt.title(f"{prefix.upper()} Clusters (2D)")
     plt.grid()
     
     if save_path:
-        plt.savefig(os.path.join(save_path, "clusters_2d.png"), dpi=300, bbox_inches='tight')
+        filename = f"{prefix}clusters_2d.png"
+        plt.savefig(os.path.join(save_path, filename), dpi=300, bbox_inches='tight')    
     plt.show()
 
-def plot_clusters_3d(df, save_path=None):
+def plot_clusters_3d(df, cluster_column='cluster', save_path=None, prefix=""):
     fig = plt.figure(figsize=(10, 7))
     ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(df['longitude'], df['latitude'], df['velocity'], c=df['cluster'], cmap='viridis')
+    ax.scatter(df['longitude'], df['latitude'], df['velocity'], c=df[cluster_column], cmap='viridis')
     ax.set_xlabel('Longitude')
     ax.set_ylabel('Latitude')
     ax.set_zlabel('Velocity')
-    plt.title('Clusters - 3D View')
-    
+    plt.title(f"{prefix.strip('_').upper()} Clusters - 3D View")
+
     if save_path:
-        plt.savefig(os.path.join(save_path, "clusters_3d.png"), dpi=300, bbox_inches='tight')
+        filename = f"{prefix}clusters_3d.png"
+        plt.savefig(os.path.join(save_path, filename), dpi=300, bbox_inches='tight')
     plt.show()
 
-def generate_cluster_contour_map(df, save_path=None, filename="clusters_contour_map.html"):
+def generate_cluster_contour_map(df, save_path=None, prefix=""):
     map_clusters = folium.Map(location=[df['latitude'].mean(), df['longitude'].mean()], zoom_start=12, tiles="CartoDB Positron")
-    
-    # Interpolate values using cubic method
+
     grid_x, grid_y = np.meshgrid(
         np.linspace(df['longitude'].min(), df['longitude'].max(), 600),
         np.linspace(df['latitude'].min(), df['latitude'].max(), 600)
     )
-    # Interpolate values using cubic method
+
     grid_z = griddata(
         (df['longitude'], df['latitude']),
         df['velocity'],
@@ -60,20 +62,16 @@ def generate_cluster_contour_map(df, save_path=None, filename="clusters_contour_
         method='cubic'
     )
 
-    # Create figure for contour    
     fig, ax = plt.subplots(figsize=(8, 8))
     levels = np.linspace(df['velocity'].min(), df['velocity'].max(), 20)
     contour = ax.contourf(grid_x, grid_y, grid_z, levels=levels, cmap="viridis", alpha=0.7)
-    #ax.contour(grid_x, grid_y, grid_z, levels=20, linewidths=0.3,linestyles='solid')
     plt.colorbar(contour, label="Vertical Displacement (mm/year)")
     ax.axis('off')
 
-    # Save temporary PNG
-    temp_path = os.path.join(tempfile.gettempdir(), "contour_map.png")
+    temp_path = os.path.join(tempfile.gettempdir(), f"{prefix}contour_map.png")
     plt.savefig(temp_path, transparent=True, bbox_inches='tight', pad_inches=0, dpi=300)
     plt.close()
 
-        # Add to Folium map
     overlay = ImageOverlay(
         image=temp_path,
         bounds=[[df['latitude'].min(), df['longitude'].min()],
@@ -81,50 +79,38 @@ def generate_cluster_contour_map(df, save_path=None, filename="clusters_contour_
         opacity=0.65
     )
     overlay.add_to(map_clusters)
-    
+
     if save_path:
-        full_path = os.path.join(save_path, filename)
-    else:
-        full_path = filename
+        filename = f"{prefix}clusters_contour_map.html"
+        map_clusters.save(os.path.join(save_path, filename))
 
-    map_clusters.save(full_path)
+    print(f"✔️ Contour map saved: {filename}")
     
-    print(f"Map saved: {full_path}")
-    
-def generate_cluster_interactive_map(df, save_path=None):
-    """
-    Generate an interactive map with clustered points.
-
-    Parameters:
-    - df (DataFrame): Must have 'latitude', 'longitude', and 'cluster' columns.
-    - save_path (str): Directory where the HTML will be saved. If None, saves in current directory.
-    """
-    # Create a map centered at the study area's center
+def generate_cluster_interactive_map(df, cluster_column='cluster', save_path=None, prefix=""):
     map_clusters = folium.Map(location=[df['latitude'].mean(), df['longitude'].mean()], zoom_start=12, tiles="CartoDB Positron")
 
-    # Create a color palette for clusters
-    unique_clusters = df['cluster'].unique()
+    unique_clusters = df[cluster_column].unique()
     cmap = cm.get_cmap('tab10', len(unique_clusters))
     colors_dict = {cluster: mcolors.rgb2hex(cmap(i % 10)[:3]) for i, cluster in enumerate(unique_clusters)}
 
-    # Add points to the map
-    for idx, row in df.iterrows():
+    for _, row in df.iterrows():
+        cluster_val = row[cluster_column]
+        color = 'grey' if cluster_val == -1 else colors_dict[cluster_val]
         folium.CircleMarker(
             location=[row['latitude'], row['longitude']],
             radius=3,
-            color='grey' if row['cluster'] == -1 else colors_dict[row['cluster']],
+            color=color,
             fill=True,
-            fill_color='grey' if row['cluster'] == -1 else colors_dict[row['cluster']],
+            fill_color=color,
             fill_opacity=0.7
         ).add_to(map_clusters)
 
-    # Save the map
-    filename = os.path.join(save_path, "clusters_interactive_map.html") if save_path else "clusters_interactive_map.html"
-    map_clusters.save(filename)
-    print(f"Interactive map saved at: {filename}")
+    if save_path:
+        filename = f"{prefix}clusters_interactive_map.html"
+        map_clusters.save(os.path.join(save_path, filename))
+    print(f"✔️ Interactive map saved: {filename}")
 
-
-def plot_top10_comparison(df_results, save_path=None):
+def plot_top10_comparison(df_results, save_path=None, prefix=""):
     """
     Plot a grouped bar chart comparing Silhouette, Davies-Bouldin, and Calinski-Harabasz for top 10 configurations,
     using two y-axes and saving the figure if a path is provided.
@@ -147,7 +133,7 @@ def plot_top10_comparison(df_results, save_path=None):
     ax2.set_ylabel('Calinski-Harabasz', fontsize=14)
 
     # Title
-    plt.title('Top 10 Configurations - Silhouette, Davies-Bouldin, Calinski-Harabasz', fontsize=16)
+    plt.title(f'Top 10 Configurations - {prefix.strip("_").upper()}', fontsize=16)
 
     # Legend
     h1, l1 = ax1.get_legend_handles_labels()
@@ -157,32 +143,19 @@ def plot_top10_comparison(df_results, save_path=None):
     plt.xticks(rotation=45)
 
     if save_path:
-        plt.savefig(os.path.join(save_path, "top10_comparison.png"), dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(save_path, f"{prefix}top10_comparison.png"), dpi=300, bbox_inches='tight')
     plt.show()
 
+def generate_combined_map(df, cluster_column='cluster', save_path=None, prefix="", filename="clusters_combined_map.html"):
+    valid_clusters_df = df[df[cluster_column] != -1].copy()
 
-def generate_combined_map(df, save_path=None, filename="clusters_combined_map.html"):
-    """
-    Generate an interactive map combining a contour interpolation layer and cluster points, excluding outliers.
-
-    Parameters:
-    - df (pd.DataFrame): DataFrame containing 'latitude', 'longitude', 'velocity', and 'cluster' columns.
-    - save_path (str): Directory to save the HTML file.
-    - filename (str): Output HTML filename.
-    """
-    # Remove outliers (-1)
-    valid_clusters_df = df[df['cluster'] != -1].copy()
-
-    # Create base map
     map_combined = folium.Map(location=[df['latitude'].mean(), df['longitude'].mean()], zoom_start=12, tiles="CartoDB Positron")
 
-    # Grid for interpolation
     grid_x, grid_y = np.meshgrid(
         np.linspace(df['longitude'].min(), df['longitude'].max(), 600),
         np.linspace(df['latitude'].min(), df['latitude'].max(), 600)
     )
 
-    # Interpolate using cubic
     grid_z = griddata(
         (df['longitude'], df['latitude']),
         df['velocity'],
@@ -190,19 +163,16 @@ def generate_combined_map(df, save_path=None, filename="clusters_combined_map.ht
         method='cubic'
     )
 
-    # Create figure for contour with a better colormap
     fig, ax = plt.subplots(figsize=(8, 8))
     levels = np.linspace(df['velocity'].min(), df['velocity'].max(), 20)
-    contour = ax.contourf(grid_x, grid_y, grid_z, levels=levels, cmap="viridis", alpha=0.7)  # <--- changed colormap
+    contour = ax.contourf(grid_x, grid_y, grid_z, levels=levels, cmap="viridis", alpha=0.7)
     plt.colorbar(contour, label="Vertical Displacement (mm/year)")
     ax.axis('off')
 
-    # Save temporary image
-    temp_path = os.path.join(tempfile.gettempdir(), "combined_contour_temp.png")
+    temp_path = os.path.join(tempfile.gettempdir(), f"{prefix}combined_contour_temp.png")
     plt.savefig(temp_path, transparent=True, bbox_inches='tight', pad_inches=0, dpi=300)
     plt.close()
 
-    # Add contour layer
     overlay = ImageOverlay(
         image=temp_path,
         bounds=[[df['latitude'].min(), df['longitude'].min()],
@@ -211,14 +181,12 @@ def generate_combined_map(df, save_path=None, filename="clusters_combined_map.ht
     )
     overlay.add_to(map_combined)
 
-    # Color map for clusters
-    unique_clusters = valid_clusters_df['cluster'].unique()
+    unique_clusters = valid_clusters_df[cluster_column].unique()
     cmap = cm.get_cmap('tab10', len(unique_clusters))
     colors_dict = {cluster: mcolors.rgb2hex(cmap(i)[:3]) for i, cluster in enumerate(unique_clusters)}
 
-    # Add valid cluster points only
-    for idx, row in valid_clusters_df.iterrows():
-        color = colors_dict.get(row['cluster'], 'gray')
+    for _, row in valid_clusters_df.iterrows():
+        color = colors_dict.get(row[cluster_column], 'gray')
         folium.CircleMarker(
             location=[row['latitude'], row['longitude']],
             radius=3,
@@ -228,7 +196,51 @@ def generate_combined_map(df, save_path=None, filename="clusters_combined_map.ht
             fill_opacity=0.8
         ).add_to(map_combined)
 
-    # Save final map
-    output_file = os.path.join(save_path, filename)
+    final_filename = f"{prefix}{filename}"
+    output_file = os.path.join(save_path, final_filename)
     map_combined.save(output_file)
     print(f"✔️ Combined map (without outliers) saved: {output_file}")
+
+def plot_model_comparison_v2(dbscan_metrics, hdbscan_metrics, save_path=None):
+    """
+    Compare DBSCAN and HDBSCAN using silhouette, calinski-harabasz, and outlier count.
+    
+    Parameters:
+    - dbscan_metrics (dict): Dictionary with metrics from DBSCAN.
+    - hdbscan_metrics (dict): Dictionary with metrics from HDBSCAN.
+    - save_path (str, optional): Path to save the generated image.
+    """
+
+    models = ['DBSCAN', 'HDBSCAN']
+    silhouette = [dbscan_metrics['silhouette'], hdbscan_metrics['silhouette']]
+    calinski = [dbscan_metrics['calinski_harabasz'], hdbscan_metrics['calinski_harabasz']]
+    outliers = [dbscan_metrics['outliers'], hdbscan_metrics['outliers']]
+
+    x = np.arange(len(models))
+    width = 0.35
+
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+
+    # Bar plots for silhouette and calinski-harabasz
+    bars1 = ax1.bar(x - width/2, silhouette, width=width, label='Silhouette', color='#1f77b4')
+    bars2 = ax1.bar(x + width/2, calinski, width=width, label='Calinski-Harabasz', color='#ff7f0e')
+
+    ax1.set_ylabel("Score")
+    ax1.set_xlabel("Clustering Model")
+    ax1.set_title("Model Comparison: DBSCAN vs HDBSCAN")
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(models)
+    ax1.legend(loc="upper left")
+
+    # Secondary axis for outliers
+    ax2 = ax1.twinx()
+    ax2.plot(x, outliers, 'ro--', label='Outliers', linewidth=2, markersize=7)
+    ax2.set_ylabel("Outlier Count")
+    ax2.legend(loc="upper right")
+
+    plt.grid(True, linestyle='--', alpha=0.4)
+
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.show()
+

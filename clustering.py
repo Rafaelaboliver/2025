@@ -8,6 +8,7 @@ Created on Tue Apr 22 13:18:32 2025
 
 import numpy as np
 import pandas as pd
+import hdbscan
 from sklearn.cluster import DBSCAN
 from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
 
@@ -78,7 +79,6 @@ def optimize_dbscan_parameters(scaled_data, eps_range, min_samples_values, metri
 
     return best_result, df_results
 
-
 def run_dbscan_clustering(df, scaled_data, eps=0.08987975951903807, min_samples=7, metric='manhattan'):
     """
     Applies DBSCAN to scaled data and adds cluster labels to the original DataFrame.
@@ -89,7 +89,94 @@ def run_dbscan_clustering(df, scaled_data, eps=0.08987975951903807, min_samples=
     n_outliers = (df['cluster'] == -1).sum()
     n_clusters = len(np.unique(df['cluster'][df['cluster'] != -1]))
 
-    print(f"Outliers detected: {n_outliers}")
-    print(f"Valid clusters (excluding outliers): {n_clusters}")
+    print(f"DBSCAN Outliers detected: {n_outliers}")
+    print(f"DBSCAN Valid clusters (excluding outliers): {n_clusters}")
+    
+    return df
+
+def optimize_hdbscan_parameters(scaled_data, min_cluster_sizes, min_samples_values=None, metrics=['euclidean', 'manhattan']):
+    best_score = -1
+    best_config = None
+    test_results = []
+
+    for metric in metrics:  # Agora testando todas as métricas que você passar
+        for min_cluster_size in min_cluster_sizes:
+            for min_samples in (min_samples_values if min_samples_values is not None else [None]):
+                try:
+                    clusterer = hdbscan.HDBSCAN(
+                        min_cluster_size=min_cluster_size,
+                        min_samples=min_samples,
+                        metric=metric
+                    )
+                    labels = clusterer.fit_predict(scaled_data)
+
+                    # Ignorar se formou 1 cluster só ou tudo outlier
+                    if len(np.unique(labels[labels != -1])) <= 1:
+                        continue
+
+                    valid_mask = labels != -1
+                    silhouette_avg = silhouette_score(scaled_data[valid_mask], labels[valid_mask])
+                    calinski_score = calinski_harabasz_score(scaled_data[valid_mask], labels[valid_mask])
+
+                    test_results.append((
+                        metric, min_cluster_size, min_samples,
+                        np.sum(labels == -1), len(np.unique(labels[labels != -1])),
+                        silhouette_avg, calinski_score
+                    ))
+
+                    # Atualiza melhor configuração
+                    if silhouette_avg > best_score:
+                        best_score = silhouette_avg
+                        best_config = {
+                            'metric': metric,
+                            'min_cluster_size': min_cluster_size,
+                            'min_samples': min_samples,
+                            'silhouette': silhouette_avg,
+                            'calinski_harabasz': calinski_score
+                            }
+
+                except Exception as e:
+                    # Se uma combinação der erro, continua
+                    print(f"Skipping configuration: metric={metric}, min_cluster_size={min_cluster_size}, min_samples={min_samples} due to error: {e}")
+                    continue
+
+    df_results = pd.DataFrame(
+        test_results,
+        columns=[
+            'metric', 'min_cluster_size', 'min_samples',
+            'outliers', 'clusters', 'silhouette', 'calinski_harabasz'
+            ]
+        )
+    return best_config, df_results
+
+def run_hdbscan_clustering(df, scaled_data, min_cluster_size=5, min_samples=12, metric='manhattan', cluster_selection_method='eom'):
+    """
+    Perform HDBSCAN clustering on the scaled dataset.
+
+    Parameters:
+    - clustering_df (pd.DataFrame): Original clustering dataset (metadata).
+    - scaled_data (np.ndarray): Normalized feature array.
+    - min_cluster_size (int): Minimum size of clusters.
+    - min_samples (int or None): Minimum samples per cluster; if None, defaults automatically.
+
+    Returns:
+    - pd.DataFrame: clustering_df with a new 'cluster_hdbscan' column.
+    """
+    clusterer = hdbscan.HDBSCAN(
+        min_cluster_size=min_cluster_size,
+        min_samples=min_samples,
+        metric=metric,
+        cluster_selection_method=cluster_selection_method
+    )
+    labels = clusterer.fit_predict(scaled_data)
+    
+    df = df.copy()
+    df['hdbscan_cluster'] = labels
+    
+    n_outliers = (labels == -1).sum()
+    n_clusters = len(np.unique(labels[labels != -1]))
+
+    print(f"HDBSCAN Outliers detected: {n_outliers}")
+    print(f"HDBSCAN Valid clusters (excluding outliers): {n_clusters}")
     
     return df

@@ -27,7 +27,9 @@ from functions import (
 )
 from clustering import ( 
     run_dbscan_clustering,
-    optimize_dbscan_parameters
+    optimize_dbscan_parameters,
+    optimize_hdbscan_parameters,
+    run_hdbscan_clustering
     )
 from visualization import (
     plot_clusters_2d,
@@ -35,7 +37,8 @@ from visualization import (
     generate_cluster_contour_map,
     generate_cluster_interactive_map,
     plot_top10_comparison,
-    generate_combined_map
+    generate_combined_map,
+    plot_model_comparison_v2
 )
 
 # ===========================================
@@ -112,38 +115,83 @@ scaler = MinMaxScaler()
 scaled_data = scaler.fit_transform(clustering_df[['latitude', 'longitude', 'velocity']])
 
 # ===========================================
-# 6. OPTMIZE PARAMETERS DBSCAN
+# 6. OPTMIZE PARAMETERS 
 # ===========================================
 
+#DBSCAN
 # Define parameter ranges
 eps_values = np.linspace(0.05, 10.0, num=500) # Generate epsilon values automatically between 0.05 and 10
 min_samples_values = np.arange(5, 21) # Generate min_samples automatically between 5 and 20
 metrics = ['euclidean', 'manhattan']
 
 # Optimize
-best_config, df_results = optimize_dbscan_parameters(
+best_dbscan_config, dbscan_df_results = optimize_dbscan_parameters(
     scaled_data=scaled_data,
     eps_range=eps_values,
     min_samples_values=min_samples_values,
     metrics=metrics
 )
 
-print("Best configuration found:", best_config)
+print("Best configuration found:", best_dbscan_config)
+
+#HBDBSCAN
+# Define parameter ranges
+min_cluster_sizes = np.arange(5, 30)
+min_samples_values_hdb = np.arange(5, 20)
+
+best_hdbscan_config, hdbscan_df_results = optimize_hdbscan_parameters(
+    scaled_data=scaled_data,
+    min_cluster_sizes=min_cluster_sizes,
+    min_samples_values=min_samples_values_hdb,
+    metrics=metrics
+)
+
+print("Best configuration found:", best_hdbscan_config)
 
 # ===========================================
 # 7. CLUSTERING PIPELINE
 # ===========================================
 
-clustering_df = run_dbscan_clustering(clustering_df, scaled_data)
+clustering_dbscan_df = run_dbscan_clustering(clustering_df, scaled_data)
+clustering_hdbscan_df = run_hdbscan_clustering(clustering_df, scaled_data)
+
+# 7.1 Extract metrics
+metrics_dbscan = {
+    'silhouette': best_dbscan_config['silhouette'],
+    'calinski_harabasz': best_dbscan_config['calinski_harabasz'],
+    'outliers': (clustering_dbscan_df['cluster'] == -1).sum(),
+    'clusters': len(clustering_dbscan_df['cluster'].unique()) - (1 if -1 in clustering_dbscan_df['cluster'].unique() else 0)
+}
+
+metrics_hdbscan = {
+    'silhouette': best_hdbscan_config['silhouette'],
+    'calinski_harabasz': best_hdbscan_config['calinski_harabasz'],
+    'outliers': (clustering_hdbscan_df['hdbscan_cluster'] == -1).sum(),
+    'clusters': len(clustering_hdbscan_df['hdbscan_cluster'].unique()) - (1 if -1 in clustering_hdbscan_df['hdbscan_cluster'].unique() else 0)
+}
 
 # ===========================================
 # 8. VISUALIZATION
 # ===========================================
-plot_clusters_2d(clustering_df, save_path=RESULTS_PATH)
-plot_clusters_3d(clustering_df, save_path=RESULTS_PATH)
-generate_cluster_contour_map(clustering_df, save_path=RESULTS_PATH)
-generate_cluster_interactive_map(clustering_df, save_path=RESULTS_PATH)
-plot_top10_comparison(df_results, save_path=RESULTS_PATH)
-generate_combined_map(clustering_df, save_path=RESULTS_PATH)
+
+#DBSCAN
+plot_clusters_2d(clustering_dbscan_df, cluster_column='cluster', prefix='dbscan_', save_path=RESULTS_PATH)
+plot_clusters_3d(clustering_dbscan_df, cluster_column='cluster', prefix='dbscan_', save_path=RESULTS_PATH)
+generate_cluster_contour_map(clustering_dbscan_df, save_path=RESULTS_PATH, prefix="dbscan_")
+generate_cluster_interactive_map(clustering_dbscan_df, cluster_column='cluster', prefix='dbscan_', save_path=RESULTS_PATH)
+plot_top10_comparison(dbscan_df_results, save_path=RESULTS_PATH, prefix="dbscan_")
+generate_combined_map(clustering_dbscan_df, cluster_column='cluster', prefix='dbscan_', save_path=RESULTS_PATH)
+
+#HDBSCAN
+plot_clusters_2d(clustering_hdbscan_df, cluster_column='hdbscan_cluster', prefix='hdbscan_', save_path=RESULTS_PATH)
+plot_clusters_3d(clustering_hdbscan_df, cluster_column='hdbscan_cluster', prefix='hdbscan_', save_path=RESULTS_PATH)
+generate_cluster_contour_map(clustering_hdbscan_df, save_path=RESULTS_PATH, prefix="hdbscan_")
+generate_cluster_interactive_map(clustering_hdbscan_df, cluster_column='hdbscan_cluster', prefix='hdbscan_', save_path=RESULTS_PATH)
+plot_top10_comparison(hdbscan_df_results, save_path=RESULTS_PATH, prefix="hdbscan_")
+generate_combined_map(clustering_hdbscan_df, cluster_column='hdbscan_cluster', prefix='hdbscan_', save_path=RESULTS_PATH)
+
+#COMPARISON
+plot_model_comparison_v2(metrics_dbscan, metrics_hdbscan, save_path='model_comparison.png')
+
 
 print("Process completed.")
