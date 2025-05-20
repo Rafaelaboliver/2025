@@ -9,6 +9,7 @@ Created on Wed Jan 22 14:50:18 2025
 import pyproj
 import numpy as np
 import pandas as pd
+from geopy.distance import geodesic
 from sklearn.linear_model import LinearRegression
 
 def load_data(path):
@@ -45,22 +46,34 @@ def convert_coordinates_pyproj(df, source_epsg, target_epsg):
 
     return df_converted
 
-def filter_by_polygon(dataframe, lat_min, lat_max, long_min, long_max):
+def filter_by_polygon(dataframe, lat_min=None, lat_max=None, long_min=None, long_max=None):
     """
     Filters a DataFrame based on geographic bounding box.
+    If no bounds are provided, the entire spatial extent of the DataFrame is used.
 
     Parameters:
     - dataframe (pd.DataFrame): Input data with 'latitude' and 'longitude' columns.
-    - lat_min, lat_max, long_min, long_max (float): Latitude and longitude bounds.
+    - lat_min, lat_max, long_min, long_max (float or None): Latitude and longitude bounds.
 
     Returns:
     - pd.DataFrame: Subset containing only the points within the specified bounds.
     """
-    
+
+    if lat_min is None:
+        lat_min = dataframe['latitude'].min()
+    if lat_max is None:
+        lat_max = dataframe['latitude'].max()
+    if long_min is None:
+        long_min = dataframe['longitude'].min()
+    if long_max is None:
+        long_max = dataframe['longitude'].max()
+
+
     filtered_df = dataframe[
-        (dataframe['latitude'] > lat_min) & (dataframe['latitude'] < lat_max) &
-        (dataframe['longitude'] > long_min) & (dataframe['longitude'] < long_max)
+        (dataframe['latitude'] >= lat_min) & (dataframe['latitude'] <= lat_max) &
+        (dataframe['longitude'] >= long_min) & (dataframe['longitude'] <= long_max)
     ]
+  
     return filtered_df
 
 def transform_time_series(dataframe):
@@ -173,3 +186,77 @@ def process_rolling_mean(pixels_dict, window_size=2):
     
     return rolling_mean_reduced, overall_mean, rolling_means_dict
 
+def discretize_velocity(velocity_series, method="mean_std", delta_factor=1.5, return_limits=False):
+    """
+    Discretizes velocity values into categorical classes:
+    0 = stable, 1 = moderate subsidence, 2 = intense subsidence
+
+    Parameters:
+    - velocity_series (pd.Series): Series with detrended velocities
+    - method (str): "mean_std" for mean ± delta_factor * std
+    - delta_factor (float): multiplier for std to define thresholds
+    - return_limits (bool): whether to return the class limits for inspection
+
+    Returns:
+    - pd.Series: Categorized values (0, 1, or 2)
+    - dict (optional): Dictionary with class thresholds
+    """
+    mean = velocity_series.mean()
+    std = velocity_series.std()
+    delta = delta_factor * std
+
+    lower_thresh = mean - delta
+    upper_thresh = mean + delta
+
+    def classify(v):
+        if v > upper_thresh:
+            return 0  # uplift or noise
+        elif lower_thresh <= v <= upper_thresh:
+            return 0  # stable
+        elif mean - 2 * delta <= v < lower_thresh:
+            return 1  # moderate
+        else:
+            return 2  # intense
+
+    classified = velocity_series.apply(classify)
+
+    if return_limits:
+        return classified, {
+            'mean': round(mean, 4),
+            'std': round(std, 4),
+            'delta': round(delta, 4),
+            'lower_threshold': round(lower_thresh, 4),
+            'upper_threshold': round(upper_thresh, 4),
+            'min': round(velocity_series.min(), 4),
+            'max': round(velocity_series.max(), 4)
+        }
+    else:
+        return classified
+
+
+
+def get_nearby_cluster_pixels(df_clustered, lat_ref, lon_ref, cluster_column='cluster', radius_meters=100, max_points=10):
+    """
+    Identifies pixel IDs near a reference location and belonging to a cluster (not outliers).
+    """
+
+    filtered = df_clustered[df_clustered[cluster_column] != -1].copy()
+    
+    def is_nearby(row):
+        return geodesic((lat_ref, lon_ref), (row['latitude'], row['longitude'])).meters <= radius_meters
+
+    filtered['distance'] = filtered.apply(is_nearby, axis=1)
+    nearby = filtered[filtered['distance']].copy()
+
+    if nearby.empty:
+        print("⚠️ No cluster points found within the specified radius.")
+        return []
+
+    nearby_sorted = nearby.copy()
+    nearby_sorted['dist_m'] = nearby_sorted.apply(
+        lambda row: geodesic((lat_ref, lon_ref), (row['latitude'], row['longitude'])).meters,
+        axis=1
+    )
+    nearby_sorted = nearby_sorted.sort_values(by='dist_m').head(max_points)
+
+    return nearby_sorted.index.tolist()

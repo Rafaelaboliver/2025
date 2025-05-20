@@ -79,7 +79,7 @@ def optimize_dbscan_parameters(scaled_data, eps_range, min_samples_values, metri
 
     return best_result, df_results
 
-def run_dbscan_clustering(df, scaled_data, eps=0.08987975951903807, min_samples=7, metric='manhattan'):
+def run_dbscan_clustering(df, scaled_data, eps=0.06993987975951904, min_samples=10, metric='manhattan'):
     """
     Applies DBSCAN to scaled data and adds cluster labels to the original DataFrame.
     """
@@ -149,7 +149,7 @@ def optimize_hdbscan_parameters(scaled_data, min_cluster_sizes, min_samples_valu
         )
     return best_config, df_results
 
-def run_hdbscan_clustering(df, scaled_data, min_cluster_size=5, min_samples=12, metric='manhattan', cluster_selection_method='eom'):
+def run_hdbscan_clustering(df, scaled_data, min_cluster_size=16, min_samples=19, metric='manhattan', cluster_selection_method='eom'):
     """
     Perform HDBSCAN clustering on the scaled dataset.
 
