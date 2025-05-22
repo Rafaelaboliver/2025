@@ -79,7 +79,7 @@ def optimize_dbscan_parameters(scaled_data, eps_range, min_samples_values, metri
 
     return best_result, df_results
 
-def run_dbscan_clustering(df, scaled_data, eps=0.06993987975951904, min_samples=10, metric='manhattan'):
+def run_dbscan_clustering(df, scaled_data, eps, min_samples, metric='manhattan'):
     """
     Applies DBSCAN to scaled data and adds cluster labels to the original DataFrame.
     """
@@ -99,7 +99,7 @@ def optimize_hdbscan_parameters(scaled_data, min_cluster_sizes, min_samples_valu
     best_config = None
     test_results = []
 
-    for metric in metrics:  # Agora testando todas as métricas que você passar
+    for metric in metrics:  
         for min_cluster_size in min_cluster_sizes:
             for min_samples in (min_samples_values if min_samples_values is not None else [None]):
                 try:
@@ -110,7 +110,6 @@ def optimize_hdbscan_parameters(scaled_data, min_cluster_sizes, min_samples_valu
                     )
                     labels = clusterer.fit_predict(scaled_data)
 
-                    # Ignorar se formou 1 cluster só ou tudo outlier
                     if len(np.unique(labels[labels != -1])) <= 1:
                         continue
 
@@ -149,7 +148,7 @@ def optimize_hdbscan_parameters(scaled_data, min_cluster_sizes, min_samples_valu
         )
     return best_config, df_results
 
-def run_hdbscan_clustering(df, scaled_data, min_cluster_size=16, min_samples=19, metric='manhattan', cluster_selection_method='eom'):
+def run_hdbscan_clustering(df, scaled_data, min_cluster_size, min_samples, metric='euclidean', cluster_selection_method='eom'):
     """
     Perform HDBSCAN clustering on the scaled dataset.
 
@@ -180,3 +179,15 @@ def run_hdbscan_clustering(df, scaled_data, min_cluster_size=16, min_samples=19,
     print(f"HDBSCAN Valid clusters (excluding outliers): {n_clusters}")
     
     return df
+
+def analyze_cluster_composition(df_region, cluster_column='cluster'):
+    """
+    Analyze how many clusters exist in a small region and their characteristics.
+    """
+    cluster_stats = df_region.groupby(cluster_column)['velocity'].agg(['count', 'mean', 'std']).reset_index()
+    cluster_stats.rename(columns={
+        'count': 'num_pixels',
+        'mean': 'mean_velocity',
+        'std': 'std_velocity'
+    }, inplace=True)
+    return cluster_stats

@@ -136,13 +136,13 @@ def generate_combined_map(df, cluster_column='cluster', save_path=None, prefix="
 
     grid_z = griddata(
         (df['longitude'], df['latitude']),
-        df['velocity'],
+        df['velocity_detrended'],
         (grid_x, grid_y),
         method='cubic'
     )
 
     fig, ax = plt.subplots(figsize=(8, 8))
-    levels = np.linspace(df['velocity'].min(), df['velocity'].max(), 20)
+    levels = np.linspace(df['velocity_detrended'].min(), df['velocity_detrended'].max(), 20)
     contour = ax.contourf(grid_x, grid_y, grid_z, levels=levels, cmap="viridis", alpha=0.7)
     plt.colorbar(contour, label="Vertical Displacement (mm/year)")
     ax.axis('off')
@@ -239,7 +239,7 @@ def plot_velocity_contour(df, park_lat=43.6990, park_lon=3.4474, save_path=None,
     )
     grid_z = griddata(
         (df['longitude'], df['latitude']),
-        df['velocity'],
+        df['velocity_detrended'],
         (grid_x, grid_y),
         method='cubic'
     )
@@ -394,3 +394,19 @@ def plot_selected_pixels_with_local_clusters(
         plt.savefig(save_path, dpi=300)
     plt.show()
 
+
+def plot_cluster_velocity_distribution(df_region, cluster_column='cluster'):
+    """
+    Plot histogram of velocities by cluster in the selected region.
+    """
+    plt.figure(figsize=(10, 6))
+    for cluster_id, group in df_region.groupby(cluster_column):
+        plt.hist(group['velocity'], bins=30, alpha=0.6, label=f'Cluster {cluster_id}')
+    
+    plt.title("Velocity Distribution per Cluster (Selected Region)")
+    plt.xlabel("Detrended Velocity (mm/year)")
+    plt.ylabel("Frequency")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()

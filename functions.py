@@ -186,53 +186,58 @@ def process_rolling_mean(pixels_dict, window_size=2):
     
     return rolling_mean_reduced, overall_mean, rolling_means_dict
 
-def discretize_velocity(velocity_series, method="mean_std", delta_factor=1.5, return_limits=False):
+def discretize_velocity(velocities: pd.Series, print_info: bool = True) -> pd.DataFrame:
     """
-    Discretizes velocity values into categorical classes:
-    0 = stable, 1 = moderate subsidence, 2 = intense subsidence
+    Discretizes a Series of velocities into 5 ordinal classes based on standard deviation from the mean.
+
+    Class 1 - Very low subsidance (less negative)
+    Class 2 - Low subsidance
+    Class 3 - Moderate subsidance
+    Class 4 - High subsidance
+    Class 5 - Very high subsidance (more negative)
 
     Parameters:
-    - velocity_series (pd.Series): Series with detrended velocities
-    - method (str): "mean_std" for mean ± delta_factor * std
-    - delta_factor (float): multiplier for std to define thresholds
-    - return_limits (bool): whether to return the class limits for inspection
+    - velocities: pd.Series of detrended velocities (only negative values)
+    - print_info: Whether to print threshold information
 
     Returns:
-    - pd.Series: Categorized values (0, 1, or 2)
-    - dict (optional): Dictionary with class thresholds
+    - DataFrame with original values and corresponding class labels
     """
-    mean = velocity_series.mean()
-    std = velocity_series.std()
-    delta = delta_factor * std
+    mean = velocities.mean()
+    std = velocities.std()
 
-    lower_thresh = mean - delta
-    upper_thresh = mean + delta
+    # Define thresholds using standard deviation
+    thresholds = [mean + std * 1.5,
+                  mean + std * 0.5,
+                  mean - std * 0.5,
+                  mean - std * 1.5]
 
-    def classify(v):
-        if v > upper_thresh:
-            return 0  # uplift or noise
-        elif lower_thresh <= v <= upper_thresh:
-            return 0  # stable
-        elif mean - 2 * delta <= v < lower_thresh:
-            return 1  # moderate
+    def assign_class(v):
+        if v >= thresholds[0]:
+            return 1
+        elif v >= thresholds[1]:
+            return 2
+        elif v >= thresholds[2]:
+            return 3
+        elif v >= thresholds[3]:
+            return 4
         else:
-            return 2  # intense
+            return 5
 
-    classified = velocity_series.apply(classify)
+    df_discretized = pd.DataFrame({'detrended_velocity': velocities})
+    df_discretized['velocity_class'] = df_discretized['detrended_velocity'].apply(assign_class)
 
-    if return_limits:
-        return classified, {
-            'mean': round(mean, 4),
-            'std': round(std, 4),
-            'delta': round(delta, 4),
-            'lower_threshold': round(lower_thresh, 4),
-            'upper_threshold': round(upper_thresh, 4),
-            'min': round(velocity_series.min(), 4),
-            'max': round(velocity_series.max(), 4)
-        }
-    else:
-        return classified
+    if print_info:
+        print("Discretization thresholds for 5 classes:")
+        print(f"  Class 1 (very low): >= {thresholds[0]:.4f}")
+        print(f"  Class 2 (low):     >= {thresholds[1]:.4f} and < {thresholds[0]:.4f}")
+        print(f"  Class 3 (moderate):>= {thresholds[2]:.4f} and < {thresholds[1]:.4f}")
+        print(f"  Class 4 (high):    >= {thresholds[3]:.4f} and < {thresholds[2]:.4f}")
+        print(f"  Class 5 (very high):< {thresholds[3]:.4f}")
+        print(f"  Min velocity: {velocities.min():.4f}")
+        print(f"  Max velocity: {velocities.max():.4f}")
 
+    return df_discretized
 
 
 def get_nearby_cluster_pixels(df_clustered, lat_ref, lon_ref, cluster_column='cluster', radius_meters=100, max_points=10):
