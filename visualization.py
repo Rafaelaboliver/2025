@@ -329,7 +329,7 @@ def plot_time_series_with_amplified_mean_trend(
                 trend = model.intercept_ + (model.coef_[0] * amplification_factor) * X.flatten()
                 slope = f"{model.coef_[0]:+.2f}"
 
-                axes[i].scatter(ts.index, y, label=f"Pixel {pid}", alpha=0.6, s=10)
+                axes[i].plot(ts.index, y, label=f"Pixel {pid}", alpha=0.8)
                 axes[i].plot(ts.index, trend, 'r--', label=f"Trend ×{amplification_factor}\n({slope} mm/yr)")
                 axes[i].axhline(0, color='gray', linestyle='--', linewidth=1)
                 axes[i].legend()
@@ -343,7 +343,7 @@ def plot_time_series_with_amplified_mean_trend(
 
 def plot_selected_pixels_with_local_clusters(
     df_clustered, pixel_ids, metadata_dict, park_coords, cluster_column='cluster',
-    prefix="", radius_meters=100, save_path=None
+    prefix="", radius_meters=1000, save_path=None
 ):
     """
     Plots the selected pixels near a park and only shows other pixels in the same clusters.

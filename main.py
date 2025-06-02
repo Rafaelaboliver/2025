@@ -43,6 +43,7 @@ from visualization import (
     plot_selected_pixels_with_local_clusters
 )
 
+
 # ===========================================
 # PARAMETERS AND PATHS
 # ===========================================
@@ -186,20 +187,20 @@ metrics_hdbscan = {
 # ===========================================
 # 8. GET PIXELS
 # ===========================================
-lat_ref = 43.685
-lon_ref = 3.375
+lat_ref = 43.69
+lon_ref = 3.45
 
 #HDBSCAN
-dbscan_nearby_pixels = get_nearby_cluster_pixels(clustering_dbscan_df, lat_ref, lon_ref, cluster_column='dbscan_cluster', radius_meters=1000, max_points=30)
-stats = analyze_cluster_composition(dbscan_nearby_pixels, cluster_column='dbscan_cluster')
-print(stats)
+dbscan_nearby_pixels = get_nearby_cluster_pixels(clustering_dbscan_df, lat_ref, lon_ref, cluster_column='cluster', radius_meters=1000, max_points=30)
+dbscan_stats = analyze_cluster_composition(dbscan_nearby_pixels, cluster_column='cluster')
+print(dbscan_stats)
 
 #HDBSCAN
 hdbscan_nearby_pixels = get_nearby_cluster_pixels(clustering_hdbscan_df, lat_ref, lon_ref, cluster_column='hdbscan_cluster', radius_meters=1000, max_points=30)
-stats = analyze_cluster_composition(hdbscan_nearby_pixels, cluster_column='hdbscan_cluster')
-print(stats)
+hdbscan_stats = analyze_cluster_composition(hdbscan_nearby_pixels, cluster_column='hdbscan_cluster')
+print(hdbscan_stats)
 # ===========================================
-# 8. VISUALIZATION
+# 9. VISUALIZATION
 # ===========================================
 
 #DBSCAN
@@ -219,7 +220,7 @@ plot_velocity_contour(clustering_hdbscan_df, prefix='hdbscan_', save_path=RESULT
 #DBSCAN
 plot_time_series_with_amplified_mean_trend(
     data=rolling_mean_reduced,
-    pixel_ids=dbscan_nearby_pixels,
+    pixel_ids=dbscan_nearby_pixels.index.tolist(),
     metadata_dict=metadata_dict,
     prefix="dbscan_",
     amplification_factor=10,
@@ -230,19 +231,19 @@ plot_time_series_with_amplified_mean_trend(
 
 plot_selected_pixels_with_local_clusters(
     df_clustered=clustering_dbscan_df,  # or clustering_dbscan_df
-    pixel_ids=dbscan_nearby_pixels,
+    pixel_ids=dbscan_nearby_pixels.index.tolist(),
     metadata_dict=metadata_dict,
     park_coords=(lat_ref, lon_ref),
     cluster_column='cluster',    # or 'dbscan_cluster' 
     prefix="dbscan_",                   # adjust acording to the model
-    radius_meters=100,
+    radius_meters=1000,
     save_path=None  # ex; 'caminho/do/diretorio'
 )
 
 #HDBSCAN
 plot_time_series_with_amplified_mean_trend(
     data=rolling_mean_reduced,
-    pixel_ids=hdbscan_nearby_pixels,
+    pixel_ids=dbscan_nearby_pixels.index.tolist(),
     metadata_dict=metadata_dict,
     prefix="hdbscan_",
     amplification_factor=10,
@@ -262,6 +263,9 @@ plot_selected_pixels_with_local_clusters(
     save_path=None  # ex; 'caminho/do/diretorio'
 )
 
+
+# --- Save statistics ---
+#stats_df.to_csv('cluster_stats.csv', index=False)
 
 #COMPARISON
 plot_model_comparison_v2(metrics_dbscan, metrics_hdbscan, save_path='model_comparison.png')

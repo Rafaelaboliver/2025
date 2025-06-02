@@ -184,7 +184,7 @@ def analyze_cluster_composition(df_region, cluster_column='cluster'):
     """
     Analyze how many clusters exist in a small region and their characteristics.
     """
-    cluster_stats = df_region.groupby(cluster_column)['velocity'].agg(['count', 'mean', 'std']).reset_index()
+    cluster_stats = df_region.groupby(cluster_column)['velocity_detrended'].agg(['count', 'mean', 'std']).reset_index()
     cluster_stats.rename(columns={
         'count': 'num_pixels',
         'mean': 'mean_velocity',

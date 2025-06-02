@@ -245,18 +245,25 @@ def get_nearby_cluster_pixels(df_clustered, lat_ref, lon_ref, cluster_column='cl
     Identifies pixel IDs near a reference location and belonging to a cluster (not outliers).
     """
 
+    # Filter out points that are considered outliers (clustered points only)
     filtered = df_clustered[df_clustered[cluster_column] != -1].copy()
     
+    # Function to check if a pixel is within the radius of the reference point
     def is_nearby(row):
         return geodesic((lat_ref, lon_ref), (row['latitude'], row['longitude'])).meters <= radius_meters
 
+    # Apply the distance function
     filtered['distance'] = filtered.apply(is_nearby, axis=1)
+    
+    # Filter the pixels that are within the radius
     nearby = filtered[filtered['distance']].copy()
 
+    # If no pixels are found, return an empty DataFrame
     if nearby.empty:
-        print("⚠️ No cluster points found within the specified radius.")
-        return []
+        print(" No cluster points found within the specified radius.")
+        return pd.DataFrame()  # Return an empty DataFrame
 
+    # Sort the nearby points by distance to the reference location
     nearby_sorted = nearby.copy()
     nearby_sorted['dist_m'] = nearby_sorted.apply(
         lambda row: geodesic((lat_ref, lon_ref), (row['latitude'], row['longitude'])).meters,
@@ -264,4 +271,5 @@ def get_nearby_cluster_pixels(df_clustered, lat_ref, lon_ref, cluster_column='cl
     )
     nearby_sorted = nearby_sorted.sort_values(by='dist_m').head(max_points)
 
-    return nearby_sorted.index.tolist()
+    # Return the sorted DataFrame
+    return nearby_sorted
