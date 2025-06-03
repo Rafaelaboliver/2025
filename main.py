@@ -57,10 +57,10 @@ SOURCE_EPSG = pyproj.CRS("EPSG:3035")  # Spatial reference system (example)
 TARGET_EPSG = pyproj.CRS("EPSG:4326")  # Target CRS (WGS 84 for lat/lon) - use 23032 to UTM32
 
 # Study area bounds (manual filtering)
-LAT_MIN = 43.67
-LAT_MAX = 43.70
-LON_MIN = 3.41
-LON_MAX = 3.47
+LAT_MIN = 43.6231
+LAT_MAX = 43.7492
+LON_MIN = 3.2974
+LON_MAX = 3.5293
 
 # ===========================================
 # 1. LOAD AND PREPARE DATA
@@ -158,9 +158,12 @@ print("Best configuration found:", best_hdbscan_config)
 # ===========================================
 
 #DBSCAN
-dbscan_eps = best_dbscan_config['eps']
-dbscan_ms = best_dbscan_config['min_samples']
-dbscan_metric = best_dbscan_config['metric']
+dbscan_eps = 0.05
+#best_dbscan_config['eps']
+dbscan_ms = 27
+#best_dbscan_config['min_samples']
+dbscan_metric = 'manhattan'
+#best_dbscan_config['metric']
 clustering_dbscan_df = run_dbscan_clustering(clustering_df, scaled_data, dbscan_eps, dbscan_ms, dbscan_metric)
 
 metrics_dbscan = {
@@ -187,8 +190,8 @@ metrics_hdbscan = {
 # ===========================================
 # 8. GET PIXELS
 # ===========================================
-lat_ref = 43.69
-lon_ref = 3.45
+lat_ref = 43.7004
+lon_ref = 3.4537
 
 #HDBSCAN
 dbscan_nearby_pixels = get_nearby_cluster_pixels(clustering_dbscan_df, lat_ref, lon_ref, cluster_column='cluster', radius_meters=1000, max_points=30)
@@ -265,7 +268,7 @@ plot_selected_pixels_with_local_clusters(
 
 
 # --- Save statistics ---
-#stats_df.to_csv('cluster_stats.csv', index=False)
+clustering_dbscan_df.to_csv('[index47]cluster2D_DBSCAN.csv', index=True)
 
 #COMPARISON
 plot_model_comparison_v2(metrics_dbscan, metrics_hdbscan, save_path='model_comparison.png')

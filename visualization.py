@@ -22,7 +22,7 @@ from sklearn.linear_model import LinearRegression
 
 
 def plot_clusters_2d(df, cluster_column='cluster', save_path=None, prefix="", 
-                     reference_point=(43.6990, 3.4474), reference_label="Approx. Park Location"):
+                     reference_point=(43.7004, 3.4537), reference_label="Approx. Location"):
     """
     Plot a 2D scatter plot of clustering results, excluding outliers, and marking a reference location.
 
@@ -41,7 +41,7 @@ def plot_clusters_2d(df, cluster_column='cluster', save_path=None, prefix="",
     
     # Plot clusters
     scatter = plt.scatter(filtered_df['longitude'], filtered_df['latitude'],
-                          c=filtered_df[cluster_column], cmap='viridis', s=25, label="Clustered Points")
+                          c=filtered_df[cluster_column], cmap='plasma', s=25, label="Clustered Points")
     circle = patches.Circle((reference_point[1], reference_point[0]), 0.015,  # lon, lat, raio em graus
                         linewidth=2, edgecolor='red', facecolor='none', linestyle='--', label=reference_label)
     # Add reference point
@@ -69,7 +69,7 @@ def plot_clusters_3d(df, cluster_column='cluster', save_path=None, prefix=""):
     ax = fig.add_subplot(111, projection='3d')
 
     ax.scatter(filtered_df['longitude'], filtered_df['latitude'], filtered_df['velocity'],
-               c=filtered_df[cluster_column], cmap='viridis')
+               c=filtered_df[cluster_column], cmap='plasma')
 
     ax.set_xlabel('Longitude')
     ax.set_ylabel('Latitude')
@@ -143,7 +143,7 @@ def generate_combined_map(df, cluster_column='cluster', save_path=None, prefix="
 
     fig, ax = plt.subplots(figsize=(8, 8))
     levels = np.linspace(df['velocity_detrended'].min(), df['velocity_detrended'].max(), 20)
-    contour = ax.contourf(grid_x, grid_y, grid_z, levels=levels, cmap="viridis", alpha=0.7)
+    contour = ax.contourf(grid_x, grid_y, grid_z, levels=levels, cmap="plasma", alpha=0.7)
     plt.colorbar(contour, label="Vertical Displacement (mm/year)")
     ax.axis('off')
 
@@ -343,7 +343,7 @@ def plot_time_series_with_amplified_mean_trend(
 
 def plot_selected_pixels_with_local_clusters(
     df_clustered, pixel_ids, metadata_dict, park_coords, cluster_column='cluster',
-    prefix="", radius_meters=1000, save_path=None
+    prefix="", radius_meters=5000, save_path=None
 ):
     """
     Plots the selected pixels near a park and only shows other pixels in the same clusters.
@@ -379,21 +379,20 @@ def plot_selected_pixels_with_local_clusters(
         ax.scatter(coords['longitude'], coords['latitude'], s=50, label=f"Pixel {pid}")
 
     # Mark the park location
-    ax.scatter(park_coords[1], park_coords[0], color='red', s=100, marker='x', label='Approx. Park Location')
-    circle = plt.Circle((park_coords[1], park_coords[0]), radius=radius_meters / 111320, color='red', fill=False, linestyle='--')
-    ax.add_patch(circle)
+    ax.scatter(park_coords[1], park_coords[0], color='red', s=100, marker='x', label='Approx. Location')
+    #circle = plt.Circle((park_coords[1], park_coords[0]), radius=radius_meters / 111320, color='red', fill=False, linestyle='--')
+    #ax.add_patch(circle)
 
-    ax.set_title(f"{prefix.strip('_').upper()}_Selected Pixels Near Park")
+    ax.set_title(f"{prefix.strip('_').upper()}_Selected Pixels")
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
     ax.grid(True)
-    ax.legend(loc='best', fontsize='small')
+    ax.legend(loc='center left', fontsize='small')
     plt.tight_layout()
 
     if save_path:
         plt.savefig(save_path, dpi=300)
     plt.show()
-
 
 def plot_cluster_velocity_distribution(df_region, cluster_column='cluster'):
     """
